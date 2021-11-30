@@ -1,0 +1,83 @@
+---
+title: "Assignment 6"
+author: "Anonymous"
+date: "20/04/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(rstan)
+rstan_options(auto_write = TRUE)
+options(mc.cores = parallel::detectCores())
+#source('stan_utility.R')
+library(aaltobda)
+data("bioassay")
+```
+
+Bioassay model
+
+The $$y_i$$ are binomially distributed, $$y_i | \theta_i = Bin(n_i, \theta_i)$$ . And we assume the Gaussian prior.
+
+# 1)
+
+```{stan output.var="binom_stan"}
+data {
+    int<lower=0> N;
+    vector[N] x;
+    int y[N];
+    int n_trials[N];
+    vector[2] mu;
+    matrix[2, 2] Sigma;
+}
+parameters {
+    vector[2] theta;
+}
+transformed parameters {
+    vector[N] alpha = theta[1] + theta[2]*x;
+}
+model {
+    theta ~ multi_normal(mu, Sigma);
+    y ~ binomial_logit(n_trials, alpha);
+}
+```
+
+
+```{r}
+mean_vec <- c(0, 10)
+cov_matrix <- matrix(c(2^2, 12, 12, 10^2), nrow = 2, ncol = 2)
+d_bin <- list(N = 4, x = bioassay$x, y = bioassay$y, n_trials = bioassay$n, mu = mean_vec, Sigma = cov_matrix)
+fit_bin <- sampling(binom_stan, data = d_bin)
+# stan_hist(fit_bin, pars = 'theta', bins = 50)
+```
+
+# 2)
+
+```{r}
+monitor(fit_bin)
+```
+
+Running monitor(d_bin) return the Rhat's computed using the later version from the paper and implemented in rstan::Rhat. I got Rhat = 1 for alpha, and Rhat = 1.01 for beta.
+We should aim to obtain an Rhat equal to one, because that despite not guaranteeing convergence, is a indication in favor of that. Since we have 1.01 for beta, we should try to continue sampling and see what happens, or change some parameter, like step size or leapfrog steps.
+
+# 3)
+
+```{r}
+library(ggplot2)
+df_fit <- as.data.frame(fit_bin)
+ggplot(data = df_fit, aes(x=`theta[1]`, y=`theta[2]`)) +
+    geom_point(color = "blue")
+```
+
+I compared the plot visually to the one in the book, and looks pretty similar.
+
+# 4)
+
+Mac.
+R.
+RStan.
+
+I had issues concerning clang++ when trying to run the model, after installing RStan with no issues. So I uninstalled RStan, followed the instructions in RStan wiki, and everything then worked out.
+Don't have access to jupyter.aalto. Used locally.
+
+It is somewhat weird to write in a different language inside R and RMarkdown, and making it all work together. But despite some doubts and errors, now I think it is okay, and getting used to it.

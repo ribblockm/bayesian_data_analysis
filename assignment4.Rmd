@@ -1,0 +1,118 @@
+---
+title: "Assignment 4"
+author: "Anonymous"
+date: "30/03/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(aaltobda)
+data("bioassay_posterior")
+data("bioassay")
+```
+
+# Bioassay model
+## a)
+
+```{r}
+meanvector <- c(0, 10)
+covmatrix <- matrix(c(2^2, 20*.6, 20*.6, 10^2), nrow = 2, ncol = 2)
+```
+
+## b)
+
+```{r}
+mean_alpha <- mean(bioassay_posterior$alpha)
+mean_beta <- mean(bioassay_posterior$beta)
+alpha_quantiles <- quantile(bioassay_posterior$alpha, probs = c(.05, .95))
+beta_quantiles <- quantile(bioassay_posterior$beta, probs = c(.05, .95))
+```
+
+The mean for alpha is `r mean_alpha` and the 5% and 95% quantiles are `r alpha_quantiles`.
+The mean for beta is `r mean_beta` and the 5% and 95% quantiles are `r beta_quantiles`.
+
+```{r}
+mean_alpha_mcse <- sqrt(var(bioassay_posterior$alpha)/length(bioassay_posterior$alpha))
+mean_beta_mcse <- sqrt(var(bioassay_posterior$beta)/length(bioassay_posterior$beta))
+alpha_quantile5_mcse <- mcse_quantile(bioassay_posterior$alpha, prob = .05)
+alpha_quantile95_mcse <- mcse_quantile(bioassay_posterior$alpha, prob = .95)
+beta_quantile5_mcse <- mcse_quantile(bioassay_posterior$beta, prob = .05)
+beta_quantile95_mcse <- mcse_quantile(bioassay_posterior$beta, prob = .95)
+```
+
+The MCSE for the mean and quantiles of alpha are `r mean_alpha_mcse` and `r alpha_quantile5_mcse` and `r alpha_quantile95_mcse`. So, we should report the mean of alpha as 0.9, and for the quantiles we have (0.5, 2.6). All three are motivated by the fact that we only have 1 digit after the decimal point which is significant, i.e. for which the mcse digits is nonzero.
+The MCSE for the mean and quantiles of beta are `r mean_beta_mcse` and `r beta_quantile5_mcse` and `r beta_quantile95_mcse`. So, we should report the mean of alpha as 10.6, and for the quantiles we have (3.9, 19). They are motivated by the fact that we only have 1 digit after the decimal point which is significant, i.e. for which the mcse digits is nonzero for the mean and 5% quantile, and none after the decimal point for the 95% quantile.
+
+## c)
+
+The importance sampling target distribution is the posterior distribution, and the proposal distribution is the prior distribution.
+The joint posterior is $$p(\alpha,\beta|y,n,x) \propto p(\alpha,\beta|n,x)*p(y|\alpha,\beta,n,x) \propto p(\alpha,\beta|n,x)* \prod p(y_i|\alpha,\beta,n_i,x_i)$$. The likelihoods follow a $$Bin(n_i, \theta_i)$$, and the prior is the joint prior $$p(\alpha, \beta)$$, with the marginal for $$\alpha \text{ following a } N(0, 2^2)$$ and for $$\beta \text { following a } N(10, 10^2)$$.
+When we compute the importance ratio, the priors cancel, and we have left the likelihood.
+
+```{r}
+log_importance_weights <- function(alpha, beta) {
+    df1 <- bioassay
+    blp <- bioassaylp(alpha, beta, df1[,1], df1[,3], df1[,2])
+    blp
+}
+```
+
+We should compute log ratios instead of ratios to avoid over and underflows in floating point presentation.
+
+## d)
+
+```{r}
+normalized_importance_weights <- function(alpha, beta) {
+    niw <- exp(log_importance_weights(alpha, beta))/sum(exp(log_importance_weights(alpha, beta)))
+    niw
+}
+```
+
+## e)
+
+```{r}
+draws_pr <- rmvnorm(4000, meanvector, covmatrix)
+n_impw <- normalized_importance_weights(alpha = draws_pr[,1], beta = draws_pr[,2])
+hist(n_impw)
+```
+
+## f)
+
+```{r}
+S_eff <- function(alpha, beta) {
+    seff <- 1/sum(n_impw^2)
+    seff
+}
+S_eff(alpha = draws_pr[,1], beta = draws_pr[,2])
+```
+
+## g)
+
+When we approximate a distribution by importance sampling, we may miss some extremely large but rare importance weights. By inspecting the histogram of weights, we have a sense of some large weights that should reflect in the effective sample size - the S_eff is small if there are few extremely large weights.
+The histogram shows we have some large weights, which means they are weighted much more than the others, when computing our expectation.
+
+## h)
+
+```{r}
+posterior_mean <- function(alpha, beta) {
+    pm_a <- sum(normalized_importance_weights(alpha, beta)*draws_pr[,1])
+    pm_b <- sum(normalized_importance_weights(alpha, beta)*draws_pr[,2])
+    c(pm_a, pm_b)
+}
+posterior_mean(draws_pr[,1], draws_pr[,2])
+```
+
+The computation for importance sampling is based on the difference between the target and proposal distributions. Because we use weights based on that difference, we don't need a proposal that is bigger everywhere than the target. The problem is, depending on that difference, we can end up with some large but unusual weights, and those impacting directly in the computation of the expectation.
+
+```{r}
+moo <- posterior_mean(draws_pr[,1], draws_pr[,2])
+seffs <- S_eff(alpha = draws_pr[,1], beta = draws_pr[,2])
+alpha_var <- mean((draws_pr[,1] - moo[1])^2)
+beta_var <- mean((draws_pr[,2] - moo[2])^2)
+pa_mcse <- sqrt(alpha_var/seffs)
+pb_mcse <- sqrt(beta_var/seffs)
+```
+
+We have for $$\alpha$$ the posterior mean `r posterior_mean(draws_pr[,1], draws_pr[,2])[1]` and MCSE based on the effective sample size, which is $$S_{eff}$$ = `r seffs`, `r pa_mcse`. Then we should report the posterior mean of $$\alpha$$ 0.9.
+The same argument applies to beta, which have a posterior mean and a MCSE of `r posterior_mean(draws_pr[,1], draws_pr[,2])[2]` and `r pb_mcse`. We report the posterior mean for $$\beta$$ simply 11.

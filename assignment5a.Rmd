@@ -1,0 +1,195 @@
+---
+title: "Assignment5- answers"
+author: "Anonymous"
+date: "06/04/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(aaltobda)
+library(tidyverse)
+library(rstan)
+data("bioassay")
+```
+
+# 1)
+
+We have the following prior:
+
+```{r}
+meanvector <- c(0, 10)
+covmatrix <- matrix(c(2^2, 12, 12, 10^2), ncol = 2, nrow = 2)
+```
+
+## a)
+
+We should build our density ratio based on the fact that our (unnormalized) posterior target distribution is of the following form: $$p(\alpha,\beta|y,n,x) \propto p(\alpha,\beta|n,x)*p(y|\alpha,\beta,n,x) \propto p(\alpha,\beta|n,x)* \prod p(y_i|\alpha,\beta,n_i,x_i)$$ , and the (unnormalized) posterior proposal distribution is of the form: $$p(\alpha,\beta|y,n,x) \propto p(\alpha,\beta|n,x)$$ , i.e. our prior.
+
+```{r}
+density_ratio <- function(alpha_propose, alpha_previous, beta_propose, beta_previous, x, y, n) {
+    logs_ratio <- bioassaylp(alpha_propose, beta_propose, x, y, n) + dmvnorm(c(alpha_propose, beta_propose), meanvector, covmatrix, log = TRUE) - bioassaylp(alpha_previous, beta_previous, x, y, n) - dmvnorm(c(alpha_previous, beta_previous), meanvector, covmatrix, log = TRUE)
+    d_ratio <- exp(logs_ratio)
+    d_ratio
+}
+```
+
+## b)
+
+```{r}
+Metropolis_bioassay <- function(alpha_cur, beta_cur, n, data, proposal_alphaSD, proposal_betaSD) {
+    #alpha_cur <- 5
+    #beta_cur <- 0
+    n <- 1e4
+    p <- data.frame(alpha = rep(1, n), beta = rep(1, n))
+    #proposal_alphaSD <- c(.01, .1, 1, 2)[2]
+    #proposal_betaSD <- c(.05, .5, 5, 10)[2]
+    p$alpha[1] <- alpha_cur
+    p$beta[1] <- beta_cur
+    warm_up <- ceiling(.1*n)
+    n_accepted <- 0
+    n_rejected <- 0
+    for (i in 1:(n-1)) {
+        alpha_cur <- p$alpha[i]
+        beta_cur <- p$beta[i]
+        alpha_pro <- rnorm(1, mean = alpha_cur, sd = proposal_alphaSD)
+        beta_pro <- rnorm(1, mean = beta_cur, sd = proposal_betaSD)
+        prob_accept <- min(1, density_ratio(alpha_propose = alpha_pro, alpha_previous = alpha_cur, beta_propose = beta_pro, beta_previous = beta_cur, x = bioassay$x, y = bioassay$y, n = bioassay$n))
+        if (runif(1) < prob_accept) {
+            p$alpha[i+1] <- alpha_pro
+            p$beta[i+1] <- beta_pro
+            if (i > warm_up) {n_accepted <- n_accepted + 1}
+        } else {
+            p$alpha[i+1] <- alpha_cur
+            p$beta[i+1] <- beta_cur
+            if (i > warm_up) {n_rejected <- n_rejected + 1}
+        }
+    }
+    return(c(p, n_accepted, n_rejected))
+}
+mcmc11 <- Metropolis_bioassay(alpha_cur = 5, beta_cur = 0, n = n, data = p, proposal_alphaSD = .1, proposal_betaSD = .5)
+mcmc12 <- Metropolis_bioassay(alpha_cur = 5, beta_cur = 0, n = n, data = p, proposal_alphaSD = 1, proposal_betaSD = 5)
+mcmc13 <- Metropolis_bioassay(alpha_cur = 5, beta_cur = 0, n = n, data = p, proposal_alphaSD = 2, proposal_betaSD = 10)
+
+#par(mfrow = c(3, 2))
+plot(mcmc11[1]$alpha)
+#plot(mcmc11[2])
+plot(mcmc12[1]$alpha)
+#plot(mcmc12[2])
+plot(mcmc13[1]$alpha)
+#plot(mcmc13[2])
+```
+
+# 2)
+
+## a)
+
+The Metropolis algorithm is based on moving or not moving (which means sampling) depending on whether the proposed move (jump) yields a higher density than the current (density) position. It implements that using the density ratio, and a flip of a coin. If the proposed jump is higher, he always moves; if it is smaller, he moves only probabilistically.
+
+## b)
+
+According to the theory, we should choose the scale so to have approx. half of jumps proposed accepted. That way we make sure to explore the parameter space more efficiently, even though with all scales proposed here, we would get the posterior asymptotically.
+I tried with three different scales (.1, 1, 2) for alpha, and three for beta (.5, 5, 10). By inspecting the ratio of accepted jumps to proposed jumps, for the lowest scale we have a big majority of jumps accepted, almost 83%, while for the largest scale, we get only 17%. For the scale suggested in the assignment, we obtain almost 40% of accepted jumps, so I chose that.
+
+## c)
+
+I tried some values, by looking at the densities plotted in the book BDA3, pg. 76, just to have a feel where would make sense to start, a point off the posterior density, but not too off, so the chain could find its way in not too many iterations.
+First I selected alpha = 5 and beta = 0, somewhere in the frontier of the posterior density.
+The second chain started in alpha = 8 and beta = 30.
+The third chain started in alpha = -4 and beta = -10.
+
+Second chain:
+
+```{r}
+mcmc22 <- Metropolis_bioassay(alpha_cur = 8, beta_cur = 30, n = n, data = p, proposal_alphaSD = 1, proposal_betaSD = 5)
+
+par(mfrow = c(1, 1))
+plot(mcmc22[1]$alpha)
+```
+
+
+Third chain:
+
+```{r}
+mcmc32 <- Metropolis_bioassay(alpha_cur = -4, beta_cur = -10, n = n, data = p, proposal_alphaSD = 1, proposal_betaSD = 5)
+
+plot(mcmc32[1]$alpha)
+```
+
+
+## d)
+
+I did 10.000 iterations, so that is the chain length.
+
+## e)
+
+For the warm-up length, I discarded the first half of samples, as usually recommended.
+
+## f)
+
+I did three chains to test convergence.
+
+## g)
+
+```{r}
+mcmc12adf <- data.frame(alpha = mcmc12[1], beta = mcmc12[2], id = 1, x = 1:10000)
+mcmc22adf <- data.frame(alpha = mcmc22[1], beta = mcmc22[2], id = 2, x = 1:10000)
+mcmc32adf <- data.frame(alpha = mcmc32[1], beta = mcmc32[2], id = 3, x = 1:10000)
+
+alpha_chains <- rbind(mcmc12adf, mcmc22adf, mcmc32adf)
+
+ggplot(data = alpha_chains, aes(x=x, y=alpha, colour = id)) +
+    geom_line()
+```
+
+## h)
+
+```{r}
+ggplot(data = alpha_chains, aes(x=x, y=beta, colour = id)) +
+    geom_line()
+```
+
+
+# 3)
+
+To compute R_hat I should use the new version available in a paper, and as a function in R, Rhat.
+First I remove the samples from warm-up, and then create a matrix with the three chains to compute the Rhat.
+
+For alpha we have:
+
+```{r}
+wu_1 <- mcmc12[1]$alpha[5000:10000]
+wu_2 <- mcmc22[1]$alpha[5000:10000]
+wu_3 <- mcmc32[1]$alpha[5000:10000]
+sims <- matrix(c(wu_1, wu_2, wu_3), ncol = 3)
+Rhat(sims)
+```
+
+And for beta we have:
+
+```{r}
+# wu_1 <- mcmc12[2][5000:10000]
+# wu_2 <- mcmc22[2][5000:10000]
+# wu_3 <- mcmc32[2][5000:10000]
+# sims <- matrix(c(wu_1, wu_2, wu_3), ncol = 3)
+# Rhat(sims)
+```
+
+## a)
+
+The idea of Rhat is that different chains have different mean and variance values. By computing several chains, we want to know whether they converge. For that, one can calculate the within variance and the total variance.
+If the starting points are overdispersed, the total variance overestimates the marginal posterior variance. And at the same time, with finite N, the within variance underestimates marginal posterior variance.
+By calculating the Rhat, that equals the sqrt of total variance divided by within variance, we approach 1 when we have convergence, and when N tends to infinity.
+Rhat is prone to error when inspecting convergence, but it is a measure easily checked. So, we should interpret its results as evidence to convergence when Rhat is very close to one.
+
+## b)
+
+I got a very good evidence of convergence for alpha in the first try, Rhat = 1.002.
+For beta, I could not calculate, because it returned an error.
+
+# 4)
+
+```{r}
+ggplot(data = mcmc12adf, aes(x=alpha, y=beta)) +
+    geom_point(color = "blue")
+```

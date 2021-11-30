@@ -1,0 +1,21 @@
+---
+title: "Untitled"
+author: "Anonymous"
+date: "09/04/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+y <- sum(rpois(20, 2))
+n <- 1e4
+p <- rep(1, n)
+for (i in 2:n) {
+    r <- p[i-1]
+    q <- exp(log(r) + rnorm(1)/9)
+    p[i] <- ifelse(runif(1) < q^y * r^(-y) * exp(-20 * (q-r)), q, r)
+}
+```

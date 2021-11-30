@@ -1,0 +1,161 @@
+---
+title: "BDA- Assignment 1"
+author: "Anonymous"
+date: "08/03/2021"
+output:
+    pdf_document:
+    toc: yes
+    toc_depth: 1
+---
+
+```{r setup, include=FALSE}
+# This chunk sets echo = TRUE as default, that is print all code.
+# knitr::opts_chunk$set can be used to set other notebook generation options, too.
+# include=FALSE inside curly brackets makes this block not be included in the pdf.
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# To install aaltobda, see the General information in the assignment.
+library(aaltobda)
+```
+
+# Exercise 1)
+
+* probability: is a measure of uncertainty; the chance of an event happening.
+* probability mass: is a point in the distribution of a pmf.
+* probability density: is a point in the distribution of a pdf.
+* probability mass function: is a function that takes as an input a value in the range of a discrete random variable, and outputs a probability for that event.
+* probability density function: is a function that takes as an input a value in the range of a continuous random variable, and outputs a probability for that event.
+* probability distribution: is a function, a pmf or a pdf.
+* discrete probability distribution: a probability distribution that takes a countable number of values; equals the pmf.
+* continuous probability distribution: a probability distribution that takes an uncountable set of values; equals the pdf.
+* cumulative distribution function: function that evaluates the probability that a random variable equals a value less than or equal to some value.
+* likelihood: is a function that computes the probability of some data, fixed, given parameters that are random.
+
+# Exercise 2)
+
+## a)
+First we should define our parameters $$\alpha$$ and $$\beta$$.
+
+```{r}
+mu <- .2
+var <- .01
+alpha <- mu*((mu*(1-mu))/var - 1)
+beta <- alpha*(1 - mu)/mu
+```
+
+Now, we define our range of points over which we'll calculate and plot our density.
+
+```{r}
+data <- seq(.0001, .99, length.out = 10^3)
+beta_density <- dbeta(data, alpha, beta)
+plot(data, beta_density)
+```
+
+## b)
+
+```{r}
+draws <- rbeta(10^3, alpha, beta)
+hist(draws, col = "blue")
+```
+
+The histogram is very similar visually to the density.
+
+## c)
+
+```{r}
+mu_sample <- mean(draws)
+var_sample <- var(draws)
+```
+
+The sample mean is `r mu_sample` while the true mean is 0.2.
+The sample variance is `r var_sample` while the true variance is 0.01.
+
+## d)
+
+```{r}
+quantile(draws, probs = c(.025, .975))
+```
+
+# Exercise 3)
+
+p(test = positive | lcancer) = .98
+p(test = positive | not_lcancer) = .04
+p(test = negative | not_lcancer) = .96
+p(lcancer) = .001
+
+We need to find what is the probability that the subject has lung cancer, if he tested positive.
+We want p(lcancer | test = positive).
+By Bayes Rule, p(lcancer | test = positive) = p(lcancer, positive)/p(test = positive).
+
+p(test = positive) = p(test = positive | lcancer)*p(lcancer) + p(test = positive | not_lcancer)*p(not_lcancer) = .98*.001 + .04*.999 = `r .98*.001 + .04*.999`.
+
+Then, p(lcancer | test = positive) = p(lcancer, positive)/p(test = positive) = .98*.001/`r .98*.001 + .04*.999` = `r .98*.001/.98*.001 + .04*.999`.
+
+If there is a high cost (in various dimensions) to the positive test, researchers should be aware that the low prevalence of the disease among the population, makes a positive test unreliable, a high false positive ratio.
+
+# Exercise 4)
+
+Create boxes.
+
+```{r}
+boxes <- matrix(c(2, 4, 1, 5, 1, 3), ncol = 2, dimnames = list(c("A", "B", "C"), c("RED", "WHITE")))
+```
+
+## a)
+
+We want p(red).
+p(red) = p(red | box = A)*p(A) + p(red | box = B)*p(B) + p(red | box = C)*p(C)
+
+```{r}
+p_red <- function(boxes) {
+    p_a <- .4
+    p_b <- .1
+    p_c <- .5
+    p_r <- (boxes["A", "RED"]/(boxes["A", "RED"] + boxes["A", "WHITE"]))*p_a + (boxes["B", "RED"]/(boxes["B", "RED"] + boxes["B", "WHITE"]))*p_b + (boxes["C", "RED"]/(boxes["C", "RED"] + boxes["C", "WHITE"]))*p_c
+    p_r
+}
+
+p_red(boxes = boxes)
+```
+
+## b)
+
+We want p(Box | red).
+p(box = A | red) = p(box = A)*p(red | box = A)/p(red)
+
+```{r}
+p_box <- function(boxes) {
+    p_a <- .4
+    p_b <- .1
+    p_c <- .5
+    p_r <- p_red(boxes = boxes)
+    p_ar <- (boxes["A", "RED"]/(boxes["A", "RED"] + boxes["A", "WHITE"]))*p_a/p_r
+    p_br <- (boxes["B", "RED"]/(boxes["B", "RED"] + boxes["B", "WHITE"]))*p_b/p_r
+    p_cr <- (boxes["C", "RED"]/(boxes["C", "RED"] + boxes["C", "WHITE"]))*p_c/p_r
+    list(p_ar, p_br, p_cr)
+}
+
+p_box(boxes = boxes)
+```
+
+# Exercise 5
+
+We want p(Elvis had identical twin | twin male).
+p(Elvis had identical twin | twin male) = p(Elvis had identical twin)*p(twin male | Elvis had identical twin)/p(twin male)
+= .0025*.5/(.0025*.5 + .0067*.5)
+p(twin male) = p(identical twin)*p(male twin | identical twin) + p(fraternal twin)*p(male twin | fraternal twin) = .0025*.5 + .0067*.5
+
+```{r}
+p_identical_twin <- function(fraternal_prob, identical_prob) {
+    f_p <- fraternal_prob
+    i_p <- identical_prob
+    p_male_i <- .5
+    p_male_f <- .25
+    p_id_tw <- i_p*p_male_i/(i_p*p_male_i + f_p*p_male_f)
+    p_id_tw
+}
+
+p_identical_twin(fraternal_prob = 1/150, identical_prob = 1/400)
+```

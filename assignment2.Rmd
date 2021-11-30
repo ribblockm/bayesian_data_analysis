@@ -1,0 +1,144 @@
+---
+title: "BDA- Assignment 2"
+author: "Anonymous"
+date: "18/03/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+# This chunk sets echo = TRUE as default, that is print all code.
+# knitr::opts_chunk$set can be used to set other notebook generation options, too.
+# include=FALSE inside curly brackets makes this block not be included in the pdf.
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(aaltobda)
+data("algae")
+```
+
+# Exercise 1
+
+## a)
+
+The likelihood as a function of $$\pi$$ is: $$p(y | \pi) = \pi^a * (1 - \pi)^b$$.
+The prior for $$\pi$$ is a Beta(2, 10) density: $$p(y | \pi) \propto \pi * (1 - \pi)^9$$.
+And the posterior is: $$p(\pi | y) \propto \pi^{a + 1} * (1 - \pi)^{b + 9}$$. The posterior is a Beta(a+2, b+10).
+
+## b)
+
+The posterior mean, a point estimate, always lies between the sample proportion $$\frac y n$$, and the prior mean $$\frac \alpha {\alpha + \beta}$$, and is equal to $$\frac {\alpha + y} {\alpha + \beta + n}$$.
+
+```{r}
+beta_point_est <- function(prior_alpha, prior_beta, data) {
+    point_est <- (prior_alpha + sum(data))/(prior_alpha + prior_beta + length(data))
+    point_est
+}
+beta_point_est(prior_alpha = 2, prior_beta = 10, data = algae)
+```
+
+To obtain the posterior interval, we should sample from a Beta(a+2, b+10).
+
+We will sample from Beta(46, 240), given our algae dataset. Order samples, and pick the 50th and the 950th values to compute the posterior interval.
+
+```{r}
+beta_interval <- function(prior_alpha, prior_beta, data, prob) {
+    alpha <- prior_alpha + sum(data)
+    beta <- prior_beta + length(data) - sum(data)
+    draws <- rbeta(10^3, alpha, beta)
+    sorted_draws <- sort(draws)
+    inf <- (1000 - 1000*prob)/2
+    sup <- 1000 - inf
+    list(sorted_draws[inf], sorted_draws[sup])
+}
+beta_interval(2, 10, algae, .9)
+```
+
+## c)
+
+We have a posterior Beta(46, 240). Let's visualize that.
+
+```{r}
+data_b <- seq(.0001, .99, length.out = 10^3)
+beta_density <- dbeta(data_b, 46, 240)
+plot(data_b, beta_density)
+```
+
+We should find the probability of the values that are smaller than 0.2, i.e. p(pi < 0.2 | y). We integrate the pdf to find that.
+
+```{r}
+beta_low <- function(prior_alpha, prior_beta, data, pi_0) {
+    alpha <- prior_alpha + sum(data)
+    beta <- prior_beta + length(data) - sum(data)
+    data_b <- seq(.0001, .99, length.out = 10^3)
+    prob_cdf <- integrate(function(data_b) dbeta(data_b, alpha, beta), .0001, pi_0-.0001)
+    prob_cdf
+}
+beta_low(2, 10, algae, .2)
+```
+
+## d)
+
+We modeled data as binomial, and for the prior we used a Beta(2, 10).
+Using the binomial model, we implicitly assume exchangeability, so the algae status (the detectability of blue-green algae levels) are conditionally independent given the parameter $$\pi$$.
+Still discussing the assumptions implicit to model the data, in using the likelihood function, we assume that the data $$y$$ affect the posterior inference only through the likelihood function $$p(y | \theta)$$. This could be a source of problem if we are not confident enough about the chosen model.
+
+Now, we should discuss the prior chosen. We can plot it to better visualize what kind of assumptions we are making.
+
+```{r}
+data_b <- seq(.0001, .99, length.out = 10^3)
+beta_density <- dbeta(data_b, 2, 10)
+plot(data_b, beta_density)
+```
+
+So, in using this prior, we are implicitly assuming that the values for the probability of the sites of having detectable blue-green algae levels are concentrated around the region $$(0, 0.5)$$.
+
+## e)
+
+For the prior sensitivity analysis, we will change our prior Beta(2, 10), to other 4 choices. One Uniform, that is, Beta(1, 1), and the other by increasing the amount of prior information, summarized by $$\alpha + \beta$$. We will then use 2 (Uniform), 2, 20, 200 for the prior information, and see how that changes our posterior estimates.
+
+First, using the uniform prior, Beta(1, 1). We plot and calculate the posterior mean, and the posterior interval.
+
+```{r}
+data_points <- seq(.0001, .99, length.out = 10^3)
+beta_density <- dbeta(data_points, 45, 231)
+plot(data_points, beta_density)
+beta_point_est(1, 1, algae)
+beta_interval(1, 1, algae, .9)
+```
+
+And now, successively, using $$\alpha + \beta = 2, 20, 200$$.
+
+```{r}
+data_points <- seq(.0001, .99, length.out = 10^3)
+beta_density <- dbeta(data_points, 44 +.17*2, 230 + .83*2)
+plot(data_points, beta_density)
+beta_point_est(.17*2, .83*2, algae)
+beta_interval(.17*2, .83*2, algae, .9)
+```
+
+```{r}
+data_points <- seq(.0001, .99, length.out = 10^3)
+beta_density <- dbeta(data_points, 44 +.17*20, 230 + .83*20)
+plot(data_points, beta_density)
+beta_point_est(.17*20, .83*20, algae)
+beta_interval(.17*20, .83*20, algae, .9)
+```
+
+```{r}
+data_points <- seq(.0001, .99, length.out = 10^3)
+beta_density <- dbeta(data_points, 44 +.17*200, 230 + .83*200)
+plot(data_points, beta_density)
+beta_point_est(.17*200, .83*200, algae)
+beta_interval(.17*200, .83*200, algae, .9)
+```
+
+So, summarizing the results.
+With our prior Beta(2, 10) we had posterior mean = 0.1608 and the posterior interval [0.1262, 0.1981].
+Using the Uniform prior, i.e. Beta(1, 1), we have posterior mean = 0.1630 and the posterior interval [0.1276, 0.2031].
+Using the Beta(2, 2) prior, we have posterior mean = 0.1606 and the posterior interval [0.1249, 0.2003].
+Using the Beta(20, 20) prior, we have posterior mean = 0.1612 and the posterior interval [0.1251, 0.1987].
+Using the Beta(200, 200) prior, we have posterior mean = 0.1645 and the posterior interval [0.1373, 0.1933].
+
+The sample proportion is `r sum(algae)/length(algae)`. Looking at the plots and the estimates, we see that with more prior information we are narrowing our posterior distribution, and pulling the posterior mean towards the prior mean, 0.1667.
+If the posterior mean is a compromise between the sample proportion and the prior mean, we see that the data we have is strong enough to be only weakly sensitive to those choice of priors, with all posterior intervals still containing the sample proportion.

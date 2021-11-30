@@ -1,0 +1,104 @@
+---
+title: "Assignment 7"
+author: "Anonymous"
+date: "30/04/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(aaltobda)
+library(rstan)
+data("drowning")
+```
+
+# Linear model: drowning data with Stan
+
+## 1.
+
+```{stan output.var=""}
+data {
+  int<lower=0> N;
+  vector[N] x;
+  vector[N] y;
+  real xpred;
+}
+parameters {
+  real alpha;
+  real beta;
+  real<lower=0> sigma; //here I changed the upper limit = 0 to lower limit = 0.
+}
+transformed parameters {
+  vector[N] mu = alpha + beta*x;
+}
+model {
+  y ~ normal(mu, sigma); //there was a ; missing
+}
+generated quantities {
+  real ypred = normal_rng(alpha + beta*xpred, sigma); //changed the pred to be based on xpred value.
+}
+```
+
+The errors are reported in comments on the code.
+
+## 2.
+
+```{stan output.var=""}
+data {
+  int<lower=0> N; //data points
+  vector[N] x; //obs year
+  vector[N] y; //obs n of drowned
+  real xpred; //prediction year
+  real pmualpha; //prior mean alpha
+  real pmubeta; //prior mean beta
+  real psalpha; //prior std alpha
+  real psbeta; //prior std beta
+}
+parameters {
+  real alpha;
+  real beta;
+  real<lower=0> sigma;
+}
+transformed parameters {
+  vector[N] mu = alpha + beta*x;
+}
+model {
+  beta ~ normal(pmubeta, psbeta);
+  y ~ normal(mu, sigma);
+}
+generated quantities {
+  real ypred = normal_rng(alpha + beta*xpred, sigma);
+}
+```
+
+For beta to lie in the range [-69, 69] with probability of 99%, the std has to be 26.8. I found that value by trial and error, based on a formula to output the interval.
+
+## 3.
+
+The code is in item 2 above. To implement the beta prior I declared the proper variables in data, line 6 through 9, and then in the model part I added beta following a distribution based on the prior values. I didn't write the values, pmubeta = 0 and psbeta = 26.8, because that would come in the RStan call.
+
+## 4.
+
+The code is the same as before, with only change in the first line of the model.
+
+```{stan output.var=""}
+model {
+  alpha ~ normal(pmualpha, psalpha);
+  beta ~ normal(pmubeta, psbeta);
+  y ~ normal(mu, sigma);
+}
+```
+
+As before, I didn't write in the code directly, because the values I'd select I'd put them in a RStan call.
+My suggestion for alpha prior is that we model it following a normal density, with the approximate historical mean, 138, and standard deviation of 25; so pmualpha = 138 and psalpha = 25.
+I selected that standard deviation value based on the visualization of the plot in Figure 1 provided in the assignment, so it would cover the entire range of intercepts.
+
+# Hierarchical model: factory data with Stan
+
+```{r}
+data("factory")
+sm <- stan_model(file = "~/Downloads/bda/bad_separate.stan")
+stan_data <- list(y = factory, N = nrow(factory), J = ncol(factory))
+s_model <- sampling(sm, data = stan_data)
+```
+
